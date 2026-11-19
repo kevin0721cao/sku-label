@@ -1,187 +1,904 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f6d5e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="SKU标签">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>SKU 标签打印</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css?v=1.1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>仓库扫码入库打印系统 (HM-A300E)</title>
+  <!-- 引入 SheetJS 用于解析 Excel/CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- 引入 JsBarcode 用于生成标准条形码 -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --warning: #d97706;
+      --danger: #dc2626;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border: 1px solid var(--border);
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title {
+      font-size: 17px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .badge {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .badge.connected {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn:active {
+      opacity: 0.75;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+    }
+
+    .btn-outline {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: var(--danger);
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    /* 扫码核心区 */
+    .scan-box {
+      border: 2px solid var(--primary);
+      background: #eff6ff;
+    }
+
+    .scan-input-wrap {
+      position: relative;
+      margin-top: 8px;
+    }
+
+    .scan-input {
+      width: 100%;
+      padding: 14px 12px;
+      font-size: 20px;
+      font-weight: 700;
+      border: 2px solid #93c5fd;
+      border-radius: 10px;
+      outline: none;
+      background: #fff;
+      color: var(--text);
+      letter-spacing: 0.5px;
+    }
+
+    .scan-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .qty-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .qty-control input {
+      width: 48px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      outline: none;
+    }
+
+    .switch-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* 预览与匹配结果 */
+    .result-area {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .match-info {
+      padding: 10px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+    }
+
+    .match-info.error {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: var(--danger);
+    }
+
+    .match-info.ok {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .label-preview-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #e2e8f0;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    /* 60mm x 40mm 比例 (3:2) */
+    #labelCanvas {
+      width: 300px;
+      height: 200px;
+      background: #fff;
+      border: 1px dashed #94a3b8;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+
+    .db-stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .file-upload-box {
+      border: 1.5px dashed #94a3b8;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .log-list {
+      max-height: 140px;
+      overflow-y: auto;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 8px;
+    }
+
+    .log-item {
+      padding: 4px 6px;
+      background: #f8fafc;
+      border-radius: 4px;
+      border-left: 3px solid var(--primary);
+    }
+    .log-item.err { border-left-color: var(--danger); color: var(--danger); }
+    .log-item.ok { border-left-color: var(--success); }
+
+    .hidden { display: none !important; }
+  </style>
 </head>
 <body>
-<input id="wedgeSink" class="wedge-sink" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-hidden="true" tabindex="-1">
-<header class="topbar">
-  <div class="title">SKU 标签打印</div>
-  <button id="printerPill" class="pill off" type="button"><span class="dot"></span><span id="printerPillText">连接打印机</span></button>
-</header>
 
-<main>
-<!-- 扫描 -->
-<section id="view-scan" class="view active">
-  <div class="cam-wrap" id="camWrap">
-    <video id="video" playsinline muted autoplay></video>
-    <div class="cam-guide" id="camGuide"><div class="cam-line"></div></div>
-    <div class="focus-ring hidden" id="focusRing"></div>
-    <div class="cam-idle" id="camIdle">
-      <button id="btnCam" class="btn big primary" type="button">📷 开始扫描</button>
-      <div class="hint">对准商品条码，自动识别</div>
-    </div>
-    <button id="btnCamStop" class="cam-stop hidden" type="button">停止</button>
-    <button id="btnTorch" class="cam-torch hidden" type="button">🔦</button>
-    <div class="cam-zoom hidden" id="camZoom">
-      <button type="button" data-z="1">1×</button><button type="button" data-z="2">2×</button><button type="button" data-z="3">3×</button>
-      <input id="zoomSlider" type="range" min="1" max="3" step="0.1" value="1" aria-label="变焦">
-    </div>
-    <div class="cam-tip hidden" id="camTip">小条码：手机离远一点，用 2× 放大；点画面可对焦</div>
-  </div>
-
-  <form id="manualForm" class="row manual" autocomplete="off">
-    <input id="manualInput" type="text" inputmode="numeric" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="手动输入条码" aria-label="条码">
-    <button class="btn" type="submit">查询</button>
-  </form>
-  <div id="wedgeDebug" class="debug"><span class="dot"></span><span id="wedgeDebugText">扫码枪：直接扫，不用点输入框</span></div>
-
-  <div id="resultCard" class="card result empty">
-    <div class="result-empty">扫描或输入条码后，这里显示商品名称</div>
-  </div>
-
-  <div class="print-row">
-    <div class="stepper" aria-label="打印张数">
-      <button type="button" id="copiesMinus">−</button>
-      <input id="copies" type="text" value="1" readonly aria-label="张数">
-      <button type="button" id="copiesPlus">＋</button>
-    </div>
-    <button id="btnPrint" class="btn big primary grow" type="button" disabled>🖨️ 打印</button>
-  </div>
-  <div id="printProgress" class="progress hidden"><div></div></div>
-
-  <div class="preview-box">
-    <div class="preview-head"><span>标签预览 <small id="previewSize">60×40mm</small></span><button id="btnSavePng" class="link" type="button">保存图片</button></div>
-    <canvas id="preview" width="480" height="320"></canvas>
-  </div>
-</section>
-
-<!-- 商品库 -->
-<section id="view-db" class="view">
+<div class="container">
+  <!-- 1. 顶部打印机连接状态 -->
   <div class="card">
-    <div class="db-count">商品库：<b id="dbCount">0</b> 条</div>
-    <div class="seg" role="radiogroup" aria-label="导入方式">
-      <label><input type="radio" name="importMode" value="merge" checked> 合并（同条码更新）</label>
-      <label><input type="radio" name="importMode" value="replace"> 覆盖（先清空）</label>
+    <div class="header-bar">
+      <div>
+        <h1 class="title">入库贴标打印 (60×40mm)</h1>
+        <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">适配汉印 HM-A300E + 蓝牙扫码枪</div>
+      </div>
+      <span id="btStatus" class="badge">未连接打印机</span>
     </div>
-    <label class="btn big primary file-btn">📥 导入表格（Excel / CSV）<input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></label>
-    <div class="hint">两列即可：第一列 SKU 条码，第二列 商品名称。可带表头。</div>
-    <div class="grid2">
-      <button id="btnTemplate" class="btn" type="button">下载模板</button>
-      <button id="btnExport" class="btn" type="button">导出备份</button>
-      <button id="btnAdd" class="btn" type="button">＋ 新增一条</button>
-      <button id="btnClear" class="btn danger" type="button">清空全部</button>
-    </div>
-  </div>
-  <input id="dbSearch" class="search" type="search" placeholder="搜索条码或名称">
-  <div id="dbList" class="list"></div>
-  <div id="dbMore" class="hint center"></div>
-</section>
-
-<!-- 设置 -->
-<section id="view-settings" class="view">
-  <div class="card">
-    <h3>打印机</h3>
-    <div id="printerInfo" class="hint">未连接</div>
-    <div id="btSupport" class="notice hidden"></div>
-    <div class="grid2">
-      <button id="btnConnect" class="btn primary" type="button">连接打印机</button>
-      <button id="btnDisconnect" class="btn" type="button">断开</button>
-      <button id="btnConnectAll" class="btn" type="button">找不到？显示全部设备</button>
-      <button id="btnTestPrint" class="btn" type="button">打印测试标签</button>
+    <div style="display: flex; gap: 8px; margin-top: 10px;">
+      <button id="btnConnect" class="btn btn-primary" style="flex: 1;">🔵 连接 HM-A300E</button>
+      <button id="btnTestPrint" class="btn btn-outline">测试打印</button>
     </div>
   </div>
 
-  <div class="card">
-    <h3>标签与打印</h3>
-    <div class="form">
-      <label>标签宽 (mm)<input id="setW" type="number" min="20" max="72" step="1"></label>
-      <label>标签高 (mm)<input id="setH" type="number" min="15" max="150" step="1"></label>
-      <label>打印指令
-        <select id="setMode">
-          <option value="cpcl-cg">CPCL（推荐）</option>
-          <option value="cpcl-eg">CPCL 十六进制</option>
-          <option value="tspl">TSPL</option>
-        </select>
+  <!-- 2. 扫码枪核心作业区 -->
+  <div class="card scan-box">
+    <div class="header-bar">
+      <span style="font-weight: 700; color: var(--primary-dark);">🔫 扫码枪输入区</span>
+      <label class="switch-label">
+        <input type="checkbox" id="lockFocusChk" checked />
+        <span>自动锁定焦点</span>
       </label>
-      <label>左右偏移 (点，8点=1mm)<input id="setOffX" type="number" step="4"></label>
-      <label>上下偏移 (点)<input id="setOffY" type="number" step="4"></label>
-      <label>浓度 <small>(0=默认)</small><input id="setDensity" type="number" min="0" max="15"></label>
-      <label>速度 <small>(-1=默认, 0-5)</small><input id="setSpeed" type="number" min="-1" max="5"></label>
-      <label class="check"><input id="setGapSense" type="checkbox"> 发送“间隙纸”指令 (GAP-SENSE)</label>
-      <label class="check"><input id="setRotate" type="checkbox"> 标签旋转 180°</label>
-      <label class="check"><input id="setAutoPrint" type="checkbox"> 扫到就自动打印</label>
-      <label class="check"><input id="setSound" type="checkbox"> 提示音</label>
-      <label>扫码枪结束等待 (ms，0=自动)<input id="setWedgeIdle" type="number" min="0" max="2000" step="10"></label>
-      <details>
-        <summary>蓝牙高级</summary>
-        <label>每包字节<input id="setChunk" type="number" min="20" max="512"></label>
-        <label>包间隔 (ms)<input id="setDelay" type="number" min="0" max="200"></label>
-        <label>写入方式
-          <select id="setWrite">
-            <option value="auto">自动</option>
-            <option value="noresp">无应答（快）</option>
-            <option value="resp">有应答（稳）</option>
-          </select>
-        </label>
-      </details>
     </div>
-    <button id="btnResetSettings" class="btn" type="button">恢复默认设置</button>
+
+    <div class="scan-input-wrap">
+      <!-- inputmode="none" 防止 iOS 弹出软键盘遮挡屏幕，点击右侧键盘图标可手动输入 -->
+      <input
+        type="text"
+        id="barcodeInput"
+        class="scan-input"
+        placeholder="请用扫码枪扫描条码..."
+        inputmode="none"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="controls-row">
+      <div class="qty-control">
+        <span style="font-size: 13px; color: var(--muted);">打印份数:</span>
+        <button type="button" class="btn btn-outline btn-sm" onclick="changeQty(-1)">-</button>
+        <input type="number" id="printQty" value="1" min="1" max="100" />
+        <button type="button" class="btn btn-outline btn-sm" onclick="changeQty(1)">+</button>
+      </div>
+
+      <label class="switch-label">
+        <input type="checkbox" id="autoPrintChk" checked />
+        <span>匹配成功自动打印</span>
+      </label>
+
+      <button type="button" class="btn btn-outline btn-sm" onclick="toggleKeyboard()">⌨️ 手输</button>
+    </div>
   </div>
 
-  <div class="card help">
-    <h3>使用帮助</h3>
-    <p><b>iPhone：</b>苹果自带的 Safari 不能连蓝牙打印机。请在 App Store 安装免费的 <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" target="_blank" rel="noopener">Bluefy</a>，用它打开本网址。</p>
-    <p><b>安卓：</b>用 Chrome 打开即可。</p>
-    <p><b>打印机：</b>汉印 HM-A300E 开机，<b>不要</b>在手机系统设置里配对，直接在本页点“连接打印机”选择 HM-A300E。</p>
-    <p><b>位置偏了：</b>先打“测试标签”，再调左右/上下偏移。标签跳纸不准：关机后按住走纸键开机做一次纸张校准。</p>
-    <p><b>添加到主屏幕：</b>Safari/Bluefy 点分享 → 添加到主屏幕；Chrome 点菜单 → 添加到主屏幕。数据保存在本手机，断网也能用。</p>
-    <p class="hint" id="appVersion"></p>
-  </div>
-</section>
-</main>
-
-<nav class="tabs">
-  <button data-view="scan" class="active" type="button"><span>📷</span>扫描</button>
-  <button data-view="db" type="button"><span>📦</span>商品库</button>
-  <button data-view="settings" type="button"><span>⚙️</span>设置</button>
-</nav>
-
-<dialog id="editDialog">
-  <form method="dialog" id="editForm">
-    <h3 id="editTitle">新增商品</h3>
-    <label>SKU 条码<input id="editSku" type="text" inputmode="numeric" required></label>
-    <label>商品名称<textarea id="editName" rows="3" required></textarea></label>
-    <div class="grid2">
-      <button value="cancel" class="btn" type="submit" formnovalidate>取消</button>
-      <button value="save" class="btn primary" type="submit">保存</button>
+  <!-- 3. 当前匹配结果与标签实时预览 -->
+  <div class="card result-area">
+    <div id="matchInfo" class="match-info">
+      等待扫描条码...
     </div>
-    <button id="editDelete" value="delete" class="btn danger full" type="submit" formnovalidate>删除这条</button>
-  </form>
-</dialog>
 
-<div id="toast" class="toast hidden"></div>
+    <div class="label-preview-wrapper">
+      <!-- 实际打印分辨率：60mm x 40mm @ 203dpi = 480 x 320 px -->
+      <canvas id="labelCanvas" width="480" height="320"></canvas>
+      <div style="font-size: 11px; color: #475569; margin-top: 6px;">60×40mm 标签实际输出预览</div>
+    </div>
 
-<script src="vendor/JsBarcode.all.min.js?v=1.1.0"></script>
-<script src="vendor/zxing.min.js?v=1.1.0" defer></script>
-<script src="vendor/xlsx.full.min.js?v=1.1.0" defer></script>
-<script src="js/db.js?v=1.1.0"></script>
-<script src="js/importer.js?v=1.1.0"></script>
-<script src="js/label.js?v=1.1.0"></script>
-<script src="js/printer.js?v=1.1.0"></script>
-<script src="js/scanner.js?v=1.1.0"></script>
-<script src="js/wedge.js?v=1.1.0"></script>
-<script src="js/app.js?v=1.1.0" defer></script>
+    <button id="btnReprint" class="btn btn-success btn-block" disabled>🖨️ 打印当前标签 (<span id="reprintQtyText">1</span>张)</button>
+  </div>
+
+  <!-- 4. SKU 匹配表格数据库管理 -->
+  <div class="card">
+    <div class="header-bar">
+      <span style="font-weight: 700;">📂 SKU 数据库管理</span>
+      <span id="dbCountBadge" class="badge">已加载 0 条</span>
+    </div>
+
+    <div class="file-upload-box" onclick="document.getElementById('excelFile').click()">
+      <div style="font-weight: 600; color: var(--primary);">+ 点击上传 Excel / CSV 匹配表</div>
+      <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">
+        支持 .xlsx / .xls / .csv（第1列：数字条码，第2列：商品名称）
+      </div>
+      <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" class="hidden" />
+    </div>
+
+    <div class="db-stats">
+      <span id="dbUpdateTime">尚未导入数据</span>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-outline btn-sm" onclick="exportSampleCSV()">下载模板</button>
+        <button class="btn btn-danger btn-sm" onclick="clearDatabase()">清空数据</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. 运行日志 -->
+  <div class="card">
+    <div style="font-size: 13px; font-weight: 700;">操作日志</div>
+    <div id="logList" class="log-list"></div>
+  </div>
+</div>
+
+<!-- 隐藏的临时条形码生成器 -->
+<svg id="tempBarcodeSvg" class="hidden"></svg>
+
+<script>
+  // ================= 全局状态 =================
+  let skuDatabase = {}; // { "6901234567890": "商品名称A", ... }
+  let currentMatchedItem = null; // { sku: "", name: "" }
+
+  // 蓝牙设备与特征值
+  let btDevice = null;
+  let btCharacteristic = null;
+
+  // DOM 元素
+  const barcodeInput = document.getElementById('barcodeInput');
+  const lockFocusChk = document.getElementById('lockFocusChk');
+  const autoPrintChk = document.getElementById('autoPrintChk');
+  const printQtyInput = document.getElementById('printQty');
+  const reprintQtyText = document.getElementById('reprintQtyText');
+  const matchInfo = document.getElementById('matchInfo');
+  const btnReprint = document.getElementById('btnReprint');
+  const canvas = document.getElementById('labelCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // ================= 初始化 =================
+  window.addEventListener('DOMContentLoaded', () => {
+    loadDatabaseFromStorage();
+    drawLabelPreview("示例商品名称 - 请先上传SKU表格", "1234567890128");
+    focusScannerInput();
+  });
+
+  // 份数同步显示
+  printQtyInput.addEventListener('input', () => {
+    reprintQtyText.textContent = printQtyInput.value || 1;
+  });
+
+  function changeQty(delta) {
+    let val = parseInt(printQtyInput.value || 1, 10) + delta;
+    if (val < 1) val = 1;
+    if (val > 200) val = 200;
+    printQtyInput.value = val;
+    reprintQtyText.textContent = val;
+    focusScannerInput();
+  }
+
+  // 切换手动软键盘输入
+  function toggleKeyboard() {
+    if (barcodeInput.getAttribute('inputmode') === 'none') {
+      barcodeInput.setAttribute('inputmode', 'text');
+      barcodeInput.focus();
+      addLog("已切换为屏幕软键盘输入模式");
+    } else {
+      barcodeInput.setAttribute('inputmode', 'none');
+      barcodeInput.focus();
+      addLog("已切换为蓝牙扫码枪防遮挡模式");
+    }
+  }
+
+  // ================= 焦点自动锁定逻辑 =================
+  function focusScannerInput() {
+    if (lockFocusChk.checked) {
+      setTimeout(() => {
+        barcodeInput.focus();
+      }, 60);
+    }
+  }
+
+  // 点击页面空白处自动把焦点拉回扫码框
+  document.addEventListener('click', (e) => {
+    const tag = e.target.tagName.toLowerCase();
+    if (tag !== 'input' && tag !== 'button' && tag !== 'label') {
+      focusScannerInput();
+    }
+  });
+
+  // ================= 扫码枪回车监听 =================
+  barcodeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const rawCode = barcodeInput.value.trim();
+      barcodeInput.value = ''; // 立即清空，准备下一枪
+      if (rawCode) {
+        handleScannedBarcode(rawCode);
+      }
+      focusScannerInput();
+    }
+  });
+
+  function handleScannedBarcode(code) {
+    // 清理可能存在的首尾不可见字符
+    const cleanCode = code.replace(/[\r\n\t\s]/g, '');
+    const productName = skuDatabase[cleanCode];
+
+    if (!productName) {
+      playBeep(false);
+      currentMatchedItem = null;
+      btnReprint.disabled = true;
+      matchInfo.className = 'match-info error';
+      matchInfo.innerHTML = `<strong>❌ 未匹配到条码：</strong>${cleanCode}<br><span style="font-size:12px;">请检查表格中是否包含此数字条码</span>`;
+      drawLabelPreview("未匹配商品 (" + cleanCode + ")", cleanCode);
+      addLog(`未匹配条码: ${cleanCode}`, 'err');
+      return;
+    }
+
+    // 匹配成功
+    playBeep(true);
+    currentMatchedItem = { sku: cleanCode, name: productName };
+    btnReprint.disabled = false;
+    matchInfo.className = 'match-info ok';
+    matchInfo.innerHTML = `
+      <div style="font-size:12px; color:#15803d;">✅ 匹配成功 (SKU: ${cleanCode})</div>
+      <div style="font-size:16px; font-weight:700; margin-top:2px;">${productName}</div>
+    `;
+
+    // 渲染 60x40mm 画布
+    drawLabelPreview(productName, cleanCode);
+    addLog(`匹配成功: ${cleanCode} -> ${productName}`, 'ok');
+
+    // 自动打印
+    if (autoPrintChk.checked) {
+      const qty = parseInt(printQtyInput.value || 1, 10);
+      printCurrentCanvas(qty);
+    }
+  }
+
+  // 手动点击打印按钮
+  btnReprint.addEventListener('click', () => {
+    if (!currentMatchedItem) return;
+    const qty = parseInt(printQtyInput.value || 1, 10);
+    printCurrentCanvas(qty);
+    focusScannerInput();
+  });
+
+  // 测试打印按钮
+  document.getElementById('btnTestPrint').addEventListener('click', () => {
+    drawLabelPreview("测试商品名称 - 汉印HM-A300E连接正常", "6900000000001");
+    printCurrentCanvas(1);
+    focusScannerInput();
+  });
+
+  // ================= 60x40mm 标签 Canvas 绘制 =================
+  // 203 DPI 下：60mm = 480px, 40mm = 320px
+  function drawLabelPreview(productName, barcodeText) {
+    const W = 480;
+    const H = 320;
+
+    // 1. 纯白底色
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. 绘制顶部商品名称（支持自动换行，最多3行）
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    const maxTextWidth = W - 32;
+    let fontSize = 32;
+    if (productName.length > 14) fontSize = 28;
+    if (productName.length > 24) fontSize = 24;
+
+    ctx.font = `bold ${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+
+    const lines = wrapText(ctx, productName, maxTextWidth, 3);
+    const lineHeight = fontSize + 6;
+    const startY = lines.length === 1 ? 26 : (lines.length === 2 ? 18 : 12);
+
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, W / 2, startY + idx * lineHeight);
+    });
+
+    // 分割线
+    const dividerY = 128;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(20, dividerY);
+    ctx.lineTo(W - 20, dividerY);
+    ctx.stroke();
+
+    // 3. 使用 JsBarcode 生成高清条形码并画到 Canvas 上
+    try {
+      const svgEl = document.getElementById('tempBarcodeSvg');
+      JsBarcode(svgEl, barcodeText, {
+        format: "CODE128",
+        width: 2.6,
+        height: 105,
+        displayValue: true,
+        fontSize: 24,
+        fontOptions: "bold",
+        margin: 0,
+        background: "#ffffff",
+        lineColor: "#000000"
+      });
+
+      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const img = new Image();
+      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = function () {
+        // 居中绘制条形码
+        const drawW = Math.min(img.width, W - 30);
+        const drawH = img.height;
+        const drawX = (W - drawW) / 2;
+        const drawY = dividerY + 18;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    } catch (err) {
+      // 如果条码包含特殊字符导致 CODE128 失败，直接打印大号文字
+      ctx.font = 'bold 28px monospace';
+      ctx.fillText(barcodeText, W / 2, 190);
+    }
+  }
+
+  // 中文/英文混合自动换行辅助函数
+  function wrapText(context, text, maxWidth, maxLines) {
+    const chars = text.split('');
+    const lines = [];
+    let currentLine = '';
+
+    for (let i = 0; i < chars.length; i++) {
+      const testLine = currentLine + chars[i];
+      const metrics = context.measureText(testLine);
+      if (metrics.width > maxWidth && currentLine !== '') {
+        lines.push(currentLine);
+        currentLine = chars[i];
+        if (lines.length >= maxLines) {
+          break;
+        }
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (lines.length < maxLines && currentLine) {
+      lines.push(currentLine);
+    }
+    return lines;
+  }
+
+  // ================= 蓝牙连接与 CPCL 打印驱动 (汉印 HM-A300E) =================
+  document.getElementById('btnConnect').addEventListener('click', async () => {
+    try {
+      if (!navigator.bluetooth) {
+        alert("当前浏览器不支持 Web Bluetooth，请确保在 iPhone 上使用 Bluefy 浏览器打开本网页！");
+        return;
+      }
+
+      addLog("正在搜索蓝牙打印机...");
+      // 汉印及常见热敏打印机 BLE Service UUID 列表
+      const optionalServices = [
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // 汉印/ISSC 常用透传服务
+        '000018f0-0000-1000-8000-00805f9b34fb', // 标准蓝牙打印服务
+        '0000ff00-0000-1000-8000-00805f9b34fb', // 常见国产打印机服务
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'  // Star/通用BLE打印服务
+      ];
+
+      btDevice = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: optionalServices
+      });
+
+      btDevice.addEventListener('gattserverdisconnected', onDisconnected);
+      addLog(`正在连接: ${btDevice.name || '未知设备'}...`);
+
+      const server = await btDevice.gatt.connect();
+      const services = await server.getPrimaryServices();
+
+      // 遍历寻找可写特征值 (Write / WriteWithoutResponse)
+      let writeChar = null;
+      for (const service of services) {
+        const chars = await service.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.writeWithoutResponse || c.properties.write) {
+            writeChar = c;
+            break;
+          }
+        }
+        if (writeChar) break;
+      }
+
+      if (!writeChar) {
+        throw new Error("已连接设备，但未找到可写入打印数据的蓝牙通道");
+      }
+
+      btCharacteristic = writeChar;
+      const statusEl = document.getElementById('btStatus');
+      statusEl.textContent = `已连: ${btDevice.name || 'HM-A300E'}`;
+      statusEl.classList.add('connected');
+      addLog(`打印机连接成功 (${btDevice.name})`, 'ok');
+
+    } catch (error) {
+      addLog(`蓝牙连接失败: ${error.message}`, 'err');
+      alert("蓝牙连接未完成：" + error.message);
+    }
+  });
+
+  function onDisconnected() {
+    btCharacteristic = null;
+    const statusEl = document.getElementById('btStatus');
+    statusEl.textContent = "已断开连接";
+    statusEl.classList.remove('connected');
+    addLog("打印机蓝牙已断开", 'err');
+  }
+
+  // 将 Canvas 转换为 CPCL BITMAP 指令并分包发送到打印机
+  async function printCurrentCanvas(copies = 1) {
+    if (!btCharacteristic) {
+      alert("请先点击顶部【连接 HM-A300E】按钮连接打印机！");
+      return;
+    }
+
+    // 稍等 50ms 确保 SVG 条形码已完全绘制到 Canvas 上
+    await new Promise(r => setTimeout(r, 60));
+
+    try {
+      const W = canvas.width;  // 480 (60mm)
+      const H = canvas.height; // 320 (40mm)
+      const imgData = ctx.getImageData(0, 0, W, H).data;
+
+      const bytesPerRow = Math.ceil(W / 8); // 480 / 8 = 60 bytes
+      const bitmapBytes = new Uint8Array(bytesPerRow * H);
+
+      // 转换为 1-bit 黑白点阵 (CPCL EG指令: 1为黑点，0为白点)
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const idx = (y * W + x) * 4;
+          const r = imgData[idx];
+          const g = imgData[idx + 1];
+          const b = imgData[idx + 2];
+          // 灰度阈值判断
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (gray < 160) {
+            const byteIdx = y * bytesPerRow + (x >> 3);
+            bitmapBytes[byteIdx] |= (0x80 >> (x & 7));
+          }
+        }
+      }
+
+      // 构造 CPCL 指令头尾
+      // ! 0 200 200 <高度> <份数>
+      const encoder = new TextEncoder();
+      const header = encoder.encode(`! 0 200 200 ${H} ${copies}\r\nPAGE-WIDTH ${W}\r\nCG ${bytesPerRow} ${H} 0 0 `);
+      const footer = encoder.encode(`\r\nGAP-SENSE\r\nFORM\r\nPRINT\r\n`);
+
+      // 合并完整数据包
+      const fullPayload = new Uint8Array(header.length + bitmapBytes.length + footer.length);
+      fullPayload.set(header, 0);
+      fullPayload.set(bitmapBytes, header.length);
+      fullPayload.set(footer, header.length + bitmapBytes.length);
+
+      // BLE 分包发送（每次 100 字节，防止 iOS Bluefy 缓冲区溢出丢包）
+      const CHUNK_SIZE = 100;
+      for (let offset = 0; offset < fullPayload.length; offset += CHUNK_SIZE) {
+        const chunk = fullPayload.slice(offset, offset + CHUNK_SIZE);
+        if (btCharacteristic.properties.writeWithoutResponse) {
+          await btCharacteristic.writeValueWithoutResponse(chunk);
+        } else {
+          await btCharacteristic.writeValue(chunk);
+        }
+        // 极短间隔保证蓝牙稳定传输
+        await new Promise(r => setTimeout(r, 12));
+      }
+
+      addLog(`已发送打印指令 (${copies}张)`, 'ok');
+    } catch (err) {
+      addLog(`打印发送异常: ${err.message}`, 'err');
+      alert("打印失败：" + err.message);
+    }
+  }
+
+  // ================= Excel / CSV 表格上传解析与本地存储 =================
+  document.getElementById('excelFile').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+
+        // 转为二维数组
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (!rows || rows.length === 0) {
+          alert("表格内容为空！");
+          return;
+        }
+
+        const newMap = {};
+        let count = 0;
+
+        rows.forEach((row, index) => {
+          if (!row || row.length < 2) return;
+          let rawSku = String(row[0] ?? '').trim();
+          let rawName = String(row[1] ?? '').trim();
+
+          if (!rawSku || !rawName) return;
+
+          // 自动跳过第一行表头（例如 "SKU"、"条码"、"商品名称"）
+          if (index === 0 && (
+            rawSku.toLowerCase().includes('sku') ||
+            rawSku.includes('条码') ||
+            rawSku.includes('编码') ||
+            rawName.includes('名称') ||
+            rawName.includes('品名')
+          )) {
+            return;
+          }
+
+          newMap[rawSku] = rawName;
+          count++;
+        });
+
+        if (count === 0) {
+          alert("未在表格中读取到有效数据，请确保第1列为数字条码，第2列为商品名称。");
+          return;
+        }
+
+        skuDatabase = newMap;
+        const nowStr = new Date().toLocaleString('zh-CN', { hour12: false });
+        localStorage.setItem('wms_sku_db', JSON.stringify(skuDatabase));
+        localStorage.setItem('wms_sku_db_time', nowStr);
+
+        updateDbUI(count, nowStr);
+        addLog(`成功导入表格，共 ${count} 条 SKU 数据`, 'ok');
+        alert(`导入成功！共加载 ${count} 条商品数据。`);
+      } catch (err) {
+        alert("解析表格失败：" + err.message);
+        addLog(`表格解析失败: ${err.message}`, 'err');
+      } finally {
+        e.target.value = ''; // 允许重复上传同一文件
+        focusScannerInput();
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function loadDatabaseFromStorage() {
+    try {
+      const saved = localStorage.getItem('wms_sku_db');
+      const savedTime = localStorage.getItem('wms_sku_db_time');
+      if (saved) {
+        skuDatabase = JSON.parse(saved);
+        const count = Object.keys(skuDatabase).length;
+        updateDbUI(count, savedTime || '已缓存');
+        addLog(`从本地缓存加载了 ${count} 条 SKU 数据`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function updateDbUI(count, timeStr) {
+    document.getElementById('dbCountBadge').textContent = `已加载 ${count} 条`;
+    document.getElementById('dbUpdateTime').textContent = `更新时间: ${timeStr}`;
+  }
+
+  function clearDatabase() {
+    if (!confirm("确定要清空当前保存的所有 SKU 匹配数据吗？")) return;
+    skuDatabase = {};
+    localStorage.removeItem('wms_sku_db');
+    localStorage.removeItem('wms_sku_db_time');
+    updateDbUI(0, '已清空');
+    addLog("已清空本地 SKU 数据库");
+    focusScannerInput();
+  }
+
+  // 下载标准 CSV 模板
+  function exportSampleCSV() {
+    const csvContent = "\uFEFF数字条码SKU,商品名称\n6901234567890,加厚抽纸整箱装 24包\n6909876543210,厨房重油污清洁剂 500ml\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "SKU匹配导入模板.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ================= 提示音与日志 =================
+  function playBeep(success) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (success) {
+        osc.frequency.value = 1200; // 清脆短促高音
+        gain.gain.value = 0.2;
+        osc.start();
+        setTimeout(() => { osc.stop(); audioCtx.close(); }, 100);
+      } else {
+        osc.type = 'sawtooth';
+        osc.frequency.value = 280; // 低沉报错音
+        gain.gain.value = 0.3;
+        osc.start();
+        setTimeout(() => { osc.stop(); audioCtx.close(); }, 350);
+      }
+    } catch (e) {}
+  }
+
+  function addLog(msg, type = '') {
+    const list = document.getElementById('logList');
+    const div = document.createElement('div');
+    const time = new Date().toTimeString().slice(0, 8);
+    div.className = `log-item ${type}`;
+    div.textContent = `[${time}] ${msg}`;
+    list.prepend(div);
+    if (list.children.length > 30) {
+      list.removeChild(list.lastChild);
+    }
+  }
+</script>
 </body>
 </html>
