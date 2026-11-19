@@ -1,9 +1,9 @@
 /* 主程序 */
 (() => {
-  const VERSION = '1.0.0';
+  const VERSION = '1.1.0';
   const $ = id => document.getElementById(id);
   const DEFAULTS = { wMm: 60, hMm: 40, mode: 'cpcl-cg', offX: 48, offY: 0, density: 0, speed: -1, gapSense: false, rotate: false,
-    autoPrint: false, sound: true, chunk: 128, delay: 15, write: 'auto' };
+    autoPrint: false, sound: true, chunk: 128, delay: 15, write: 'auto', wedgeIdle: 0, zoom: 0 };
   let S = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem('sku-label-settings') || '{}'));
   let current = null;            // {sku, name, found}
   const labelCanvas = document.createElement('canvas');
@@ -42,6 +42,7 @@
     document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === 'view-' + v));
     if (v !== 'scan' && CamScanner.isRunning()) stopCam();
     if (v === 'db') renderList();
+    if (v === 'scan') setTimeout(() => Wedge.focusSink(), 0);
     window.scrollTo(0, 0);
   }
 
@@ -93,8 +94,11 @@
         $('camWrap').classList.add('flash'); setTimeout(() => $('camWrap').classList.remove('flash'), 300);
         $('manualInput').value = code; showResult(code, true);
       });
-      $('camIdle').classList.add('hidden'); $('btnCamStop').classList.remove('hidden');
+      $('camIdle').classList.add('hidden'); $('btnCamStop').classList.remove('hidden'); $('camTip').classList.remove('hidden');
+      setTimeout(() => $('camTip').classList.add('hidden'), 5000);
       $('btnTorch').classList.toggle('hidden', !CamScanner.hasTorch());
+      setupZoom();
+      $('video').addEventListener('loadedmetadata', placeGuide, { once: true }); placeGuide();
     } catch (e) {
       console.error(e);
       let msg = '无法打开摄像头：' + (e.message || e.name);
@@ -104,33 +108,82 @@
       toast(msg, 5000);
     } finally { $('btnCam').disabled = false; }
   }
-  function stopCam() { CamScanner.stop(); $('camIdle').classList.remove('hidden'); $('btnCamStop').classList.add('hidden'); $('btnTorch').classList.add('hidden'); }
+  function stopCam() { CamScanner.stop(); $('camIdle').classList.remove('hidden'); $('btnCamStop').classList.add('hidden'); $('btnTorch').classList.add('hidden'); $('camZoom').classList.add('hidden'); $('camTip').classList.add('hidden'); }
+  // 取景框按实际解码区域显示（视频是 object-fit: cover，需要换算）
+  function placeGuide() {
+    const [vw, vh] = CamScanner.videoSize(); const box = $('camWrap'), g = $('camGuide');
+    if (!vw) { setTimeout(placeGuide, 200); return; }
+    const W = box.clientWidth, H = box.clientHeight, sc = Math.max(W / vw, H / vh);
+    const dw = vw * sc, dh = vh * sc, ox = (W - dw) / 2, oy = (H - dh) / 2;
+    const rw = vw * CamScanner.ROI.w * sc, rh = vh * CamScanner.ROI.h * sc;
+    const l = Math.max(4, ox + (dw - rw) / 2), t = Math.max(4, oy + (dh - rh) / 2);
+    Object.assign(g.style, { left: l + 'px', top: t + 'px', right: Math.max(4, W - l - rw) + 'px', bottom: Math.max(4, H - t - rh) + 'px' });
+  }
+  window.addEventListener('resize', () => { if (CamScanner.isRunning()) placeGuide(); });
+  function setupZoom() {
+    const z = CamScanner.zoomRange(), box = $('camZoom');
+    if (!z) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const sl = $('zoomSlider'); sl.min = z.min; sl.max = Math.min(z.max, 8); sl.step = z.step;
+    box.querySelectorAll('button').forEach(b => b.classList.toggle('hidden', +b.dataset.z > z.max || +b.dataset.z < z.min));
+    const initial = S.zoom > 0 ? S.zoom : Math.min(z.max, Math.max(z.min, 1.5));   // 默认 1.5×，小条码更清楚
+    setZoomUI(initial);
+  }
+  async function setZoomUI(v, save) {
+    await CamScanner.setZoom(v); $('zoomSlider').value = v;
+    $('camZoom').querySelectorAll('button').forEach(b => b.classList.toggle('on', Math.abs(+b.dataset.z - v) < 0.05));
+    if (save) { S.zoom = v; saveSettings(); }
+  }
+  $('camZoom').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setZoomUI(+b.dataset.z, true); });
+  $('zoomSlider').addEventListener('input', e => setZoomUI(+e.target.value, true));
+  // 点按对焦
+  $('video').addEventListener('click', e => {
+    if (!CamScanner.isRunning()) return;
+    const r = $('video').getBoundingClientRect(), [vw, vh] = CamScanner.videoSize();
+    const sc = Math.max(r.width / vw, r.height / vh), dw = vw * sc, dh = vh * sc;
+    const x = Math.min(1, Math.max(0, (e.clientX - r.left - (r.width - dw) / 2) / dw)), y = Math.min(1, Math.max(0, (e.clientY - r.top - (r.height - dh) / 2) / dh));
+    const ring = $('focusRing'); ring.style.left = (e.clientX - r.left) + 'px'; ring.style.top = (e.clientY - r.top) + 'px';
+    ring.classList.remove('hidden'); setTimeout(() => ring.classList.add('hidden'), 800);
+    CamScanner.focusAt(x, y);
+  });
   $('btnCam').onclick = startCam;
   $('btnCamStop').onclick = stopCam;
   let torchOn = false;
   $('btnTorch').onclick = async () => { torchOn = !torchOn; await CamScanner.torch(torchOn); };
 
   /* ---------- 手动输入 / 扫码枪 ---------- */
-  $('manualForm').addEventListener('submit', e => { e.preventDefault(); CamScanner.resetLast(); showResult($('manualInput').value, true); $('manualInput').select(); });
-  // 扫码枪（键盘模式）：焦点不在输入框时，快速连续输入并以回车结束
-  let wedge = '', wedgeT = 0;
-  document.addEventListener('keydown', e => {
-    const tag = (e.target.tagName || '').toLowerCase();
-    if (['input', 'textarea', 'select'].includes(tag) || $('editDialog').open) return;
-    const now = Date.now();
-    if (now - wedgeT > 100) wedge = '';
-    wedgeT = now;
-    if (e.key === 'Enter') {
-      if (wedge.length >= 4) { showView('scan'); $('manualInput').value = wedge; CamScanner.resetLast(); showResult(wedge, true); }
-      wedge = ''; return;
-    }
-    if (e.key.length === 1) wedge += e.key;
+  function scanned(code, src) {
+    code = String(code || '').trim(); if (!code) return;
+    const dlg = $('editDialog'); if (dlg.open) { dlg.returnValue = 'cancel'; dlg.close(); }   // 弹窗不吞扫描
+    if (!$('view-scan').classList.contains('active')) showView('scan');
+    $('manualInput').value = code; CamScanner.resetLast(); showResult(code, true);
+  }
+  $('manualForm').addEventListener('submit', e => { e.preventDefault(); scanned($('manualInput').value, 'manual'); $('manualInput').select(); });
+  // 手动框获得焦点时，扫码枪也会打进来：若是快速连续输入且没有回车，停顿后自动查询
+  let mTimes = [], mTimer = null;
+  $('manualInput').addEventListener('input', () => {
+    const t = performance.now(); mTimes.push(t); if (mTimes.length > 64) mTimes.shift();
+    clearTimeout(mTimer);
+    mTimer = setTimeout(() => {
+      const v = Wedge.clean($('manualInput').value); const n = Math.min(mTimes.length, v.length);
+      if (n >= 4) { const span = mTimes[mTimes.length - 1] - mTimes[mTimes.length - n]; if (span / (n - 1) < 40) { wedgeDebug({ raw: $('manualInput').value, why: '停顿(输入框)', ms: Math.round(span), len: v.length }); scanned(v, 'manual-burst'); } }
+      mTimes = [];
+    }, S.wedgeIdle || 160);
   });
+  function wedgeDebug(info) {
+    const vis = String(info.raw).replace(/[\u0000-\u001f\u007f]/g, c => '\\x' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+    $('wedgeDebugText').textContent = `最后收到："${vis}"（${info.len}位，结束:${info.why}，${info.ms}ms${info.ignored ? '，已忽略:' + info.ignored : ''}）`;
+    $('wedgeDebug').classList.add('got');
+  }
+  Wedge.cfg.idleMs = S.wedgeIdle || 0;
+  Wedge.init({ sink: $('wedgeSink'), onScan: code => scanned(code, 'wedge'), onDebug: wedgeDebug, shouldFocus: () => $('view-scan').classList.contains('active') });
+  document.addEventListener('focusin', () => $('wedgeDebug').classList.toggle('ready', document.activeElement === $('wedgeSink')));
 
   /* ---------- 张数 ---------- */
   const copiesVal = () => Math.max(1, Math.min(999, parseInt($('copies').value, 10) || 1));
   $('copiesMinus').onclick = () => { $('copies').value = Math.max(1, copiesVal() - 1); };
   $('copiesPlus').onclick = () => { $('copies').value = Math.min(999, copiesVal() + 1); };
+  $('copies').onclick = () => { const v = prompt('打印张数', copiesVal()); if (v != null) $('copies').value = Math.max(1, Math.min(999, parseInt(v, 10) || 1)); Wedge.focusSink(); };
 
   /* ---------- 打印 ---------- */
   async function doPrint(testItem) {
@@ -147,7 +200,7 @@
       const n = await BlePrinter.printCanvas(labelCanvas, Object.assign({}, S, { copies: testItem ? 1 : copiesVal() }), p => { prog.firstElementChild.style.width = Math.round(p * 100) + '%'; });
       toast(`已发送打印 ${testItem ? 1 : copiesVal()} 张（${Math.round(n / 1024)}KB）`);
     } catch (e) { btError(e); }
-    finally { setTimeout(() => prog.classList.add('hidden'), 600); $('btnPrint').disabled = !(current && current.found); renderPreview(); }
+    finally { setTimeout(() => prog.classList.add('hidden'), 600); $('btnPrint').disabled = !(current && current.found); renderPreview(); Wedge.focusSink(); }
   }
   $('btnPrint').onclick = () => doPrint();
   $('btnTestPrint').onclick = () => doPrint({ test: true, sku: 'TEST' });
@@ -265,12 +318,12 @@
     } else if (v === 'delete' && editing) {
       if (confirm('确定删除这条？')) { await SkuDB.del(editing); toast('已删除'); }
     }
-    renderList();
+    renderList(); Wedge.focusSink();
   });
 
   /* ---------- 设置 ---------- */
   const fields = { setW: 'wMm', setH: 'hMm', setMode: 'mode', setOffX: 'offX', setOffY: 'offY', setDensity: 'density', setSpeed: 'speed',
-    setGapSense: 'gapSense', setRotate: 'rotate', setAutoPrint: 'autoPrint', setSound: 'sound', setChunk: 'chunk', setDelay: 'delay', setWrite: 'write' };
+    setGapSense: 'gapSense', setRotate: 'rotate', setAutoPrint: 'autoPrint', setSound: 'sound', setWedgeIdle: 'wedgeIdle', setChunk: 'chunk', setDelay: 'delay', setWrite: 'write' };
   function fillSettings() {
     for (const [id, k] of Object.entries(fields)) { const el = $(id); if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k]; }
   }
@@ -278,7 +331,7 @@
     $(id).addEventListener('change', e => {
       const el = e.target;
       S[k] = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value);
-      saveSettings(); renderPreview();
+      saveSettings(); renderPreview(); Wedge.cfg.idleMs = S.wedgeIdle || 0;
     });
   }
   $('btnResetSettings').onclick = () => { S = Object.assign({}, DEFAULTS); saveSettings(); fillSettings(); renderPreview(); toast('已恢复默认'); };
@@ -290,10 +343,26 @@
     try { await SkuDB.load(); } catch (e) { toast('本地数据库打开失败：' + e.message); }
     updateCount(); renderPreview(); updatePrinterUI();
     if (!BlePrinter.supported()) btGuide(false);
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    setupSW();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
+  /* ---------- 自动更新 ---------- */
+  function setupSW() {
+    if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;          // 第一次安装不刷新
+      reloading = true; sessionStorage.setItem('sku-label-updated', VERSION);
+      toast('已更新到新版本，正在刷新…', 2000); setTimeout(() => location.reload(), 600);
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
+    if (sessionStorage.getItem('sku-label-updated')) { sessionStorage.removeItem('sku-label-updated'); setTimeout(() => toast('已更新 ✓ 版本 ' + VERSION), 300); }
+  }
   // 测试钩子
-  window.__app = { showResult, renderPreview, labelCanvas, get current() { return current; }, S, showView };
+  window.__app = { scanned, showResult, renderPreview, labelCanvas, get current() { return current; }, S, showView };
   init();
 })();
