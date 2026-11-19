@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f6d5e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SKU标签">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>SKU 标签打印</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="title">SKU 标签打印</div>
+  <button id="printerPill" class="pill off" type="button"><span class="dot"></span><span id="printerPillText">连接打印机</span></button>
+</header>
+
+<main>
+<!-- 扫描 -->
+<section id="view-scan" class="view active">
+  <div class="cam-wrap" id="camWrap">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="cam-guide"><div class="cam-line"></div></div>
+    <div class="cam-idle" id="camIdle">
+      <button id="btnCam" class="btn big primary" type="button">📷 开始扫描</button>
+      <div class="hint">对准商品条码，自动识别</div>
+    </div>
+    <button id="btnCamStop" class="cam-stop hidden" type="button">停止</button>
+    <button id="btnTorch" class="cam-torch hidden" type="button">🔦</button>
+  </div>
+
+  <form id="manualForm" class="row manual" autocomplete="off">
+    <input id="manualInput" type="text" inputmode="numeric" enterkeyhint="search" placeholder="手动输入条码 / 扫码枪" aria-label="条码">
+    <button class="btn" type="submit">查询</button>
+  </form>
+
+  <div id="resultCard" class="card result empty">
+    <div class="result-empty">扫描或输入条码后，这里显示商品名称</div>
+  </div>
+
+  <div class="print-row">
+    <div class="stepper" aria-label="打印张数">
+      <button type="button" id="copiesMinus">−</button>
+      <input id="copies" type="number" min="1" max="999" value="1" inputmode="numeric">
+      <button type="button" id="copiesPlus">＋</button>
+    </div>
+    <button id="btnPrint" class="btn big primary grow" type="button" disabled>🖨️ 打印</button>
+  </div>
+  <div id="printProgress" class="progress hidden"><div></div></div>
+
+  <div class="preview-box">
+    <div class="preview-head"><span>标签预览 <small id="previewSize">60×40mm</small></span><button id="btnSavePng" class="link" type="button">保存图片</button></div>
+    <canvas id="preview" width="480" height="320"></canvas>
+  </div>
+</section>
+
+<!-- 商品库 -->
+<section id="view-db" class="view">
+  <div class="card">
+    <div class="db-count">商品库：<b id="dbCount">0</b> 条</div>
+    <div class="seg" role="radiogroup" aria-label="导入方式">
+      <label><input type="radio" name="importMode" value="merge" checked> 合并（同条码更新）</label>
+      <label><input type="radio" name="importMode" value="replace"> 覆盖（先清空）</label>
+    </div>
+    <label class="btn big primary file-btn">📥 导入表格（Excel / CSV）<input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"></label>
+    <div class="hint">两列即可：第一列 SKU 条码，第二列 商品名称。可带表头。</div>
+    <div class="grid2">
+      <button id="btnTemplate" class="btn" type="button">下载模板</button>
+      <button id="btnExport" class="btn" type="button">导出备份</button>
+      <button id="btnAdd" class="btn" type="button">＋ 新增一条</button>
+      <button id="btnClear" class="btn danger" type="button">清空全部</button>
+    </div>
+  </div>
+  <input id="dbSearch" class="search" type="search" placeholder="搜索条码或名称">
+  <div id="dbList" class="list"></div>
+  <div id="dbMore" class="hint center"></div>
+</section>
+
+<!-- 设置 -->
+<section id="view-settings" class="view">
+  <div class="card">
+    <h3>打印机</h3>
+    <div id="printerInfo" class="hint">未连接</div>
+    <div id="btSupport" class="notice hidden"></div>
+    <div class="grid2">
+      <button id="btnConnect" class="btn primary" type="button">连接打印机</button>
+      <button id="btnDisconnect" class="btn" type="button">断开</button>
+      <button id="btnConnectAll" class="btn" type="button">找不到？显示全部设备</button>
+      <button id="btnTestPrint" class="btn" type="button">打印测试标签</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>标签与打印</h3>
+    <div class="form">
+      <label>标签宽 (mm)<input id="setW" type="number" min="20" max="72" step="1"></label>
+      <label>标签高 (mm)<input id="setH" type="number" min="15" max="150" step="1"></label>
+      <label>打印指令
+        <select id="setMode">
+          <option value="cpcl-cg">CPCL（推荐）</option>
+          <option value="cpcl-eg">CPCL 十六进制</option>
+          <option value="tspl">TSPL</option>
+        </select>
+      </label>
+      <label>左右偏移 (点，8点=1mm)<input id="setOffX" type="number" step="4"></label>
+      <label>上下偏移 (点)<input id="setOffY" type="number" step="4"></label>
+      <label>浓度 <small>(0=默认)</small><input id="setDensity" type="number" min="0" max="15"></label>
+      <label>速度 <small>(-1=默认, 0-5)</small><input id="setSpeed" type="number" min="-1" max="5"></label>
+      <label class="check"><input id="setGapSense" type="checkbox"> 发送“间隙纸”指令 (GAP-SENSE)</label>
+      <label class="check"><input id="setRotate" type="checkbox"> 标签旋转 180°</label>
+      <label class="check"><input id="setAutoPrint" type="checkbox"> 扫到就自动打印</label>
+      <label class="check"><input id="setSound" type="checkbox"> 提示音</label>
+      <details>
+        <summary>蓝牙高级</summary>
+        <label>每包字节<input id="setChunk" type="number" min="20" max="512"></label>
+        <label>包间隔 (ms)<input id="setDelay" type="number" min="0" max="200"></label>
+        <label>写入方式
+          <select id="setWrite">
+            <option value="auto">自动</option>
+            <option value="noresp">无应答（快）</option>
+            <option value="resp">有应答（稳）</option>
+          </select>
+        </label>
+      </details>
+    </div>
+    <button id="btnResetSettings" class="btn" type="button">恢复默认设置</button>
+  </div>
+
+  <div class="card help">
+    <h3>使用帮助</h3>
+    <p><b>iPhone：</b>苹果自带的 Safari 不能连蓝牙打印机。请在 App Store 安装免费的 <a href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055" target="_blank" rel="noopener">Bluefy</a>，用它打开本网址。</p>
+    <p><b>安卓：</b>用 Chrome 打开即可。</p>
+    <p><b>打印机：</b>汉印 HM-A300E 开机，<b>不要</b>在手机系统设置里配对，直接在本页点“连接打印机”选择 HM-A300E。</p>
+    <p><b>位置偏了：</b>先打“测试标签”，再调左右/上下偏移。标签跳纸不准：关机后按住走纸键开机做一次纸张校准。</p>
+    <p><b>添加到主屏幕：</b>Safari/Bluefy 点分享 → 添加到主屏幕；Chrome 点菜单 → 添加到主屏幕。数据保存在本手机，断网也能用。</p>
+    <p class="hint" id="appVersion"></p>
+  </div>
+</section>
+</main>
+
+<nav class="tabs">
+  <button data-view="scan" class="active" type="button"><span>📷</span>扫描</button>
+  <button data-view="db" type="button"><span>📦</span>商品库</button>
+  <button data-view="settings" type="button"><span>⚙️</span>设置</button>
+</nav>
+
+<dialog id="editDialog">
+  <form method="dialog" id="editForm">
+    <h3 id="editTitle">新增商品</h3>
+    <label>SKU 条码<input id="editSku" type="text" inputmode="numeric" required></label>
+    <label>商品名称<textarea id="editName" rows="3" required></textarea></label>
+    <div class="grid2">
+      <button value="cancel" class="btn" type="submit" formnovalidate>取消</button>
+      <button value="save" class="btn primary" type="submit">保存</button>
+    </div>
+    <button id="editDelete" value="delete" class="btn danger full" type="submit" formnovalidate>删除这条</button>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="vendor/JsBarcode.all.min.js"></script>
+<script src="vendor/zxing.min.js" defer></script>
+<script src="vendor/xlsx.full.min.js" defer></script>
+<script src="js/db.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/label.js"></script>
+<script src="js/printer.js"></script>
+<script src="js/scanner.js"></script>
+<script src="js/app.js" defer></script>
+</body>
+</html>

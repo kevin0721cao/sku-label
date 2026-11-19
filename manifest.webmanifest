@@ -1,0 +1,17 @@
+{
+  "name": "SKU 标签打印",
+  "short_name": "SKU标签",
+  "description": "扫商品条码，查出名称，蓝牙热敏打印 60×40 标签",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f5f4",
+  "theme_color": "#0f6d5e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
