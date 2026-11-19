@@ -12,9 +12,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=1.1.0">
 </head>
 <body>
+<input id="wedgeSink" class="wedge-sink" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" aria-hidden="true" tabindex="-1">
 <header class="topbar">
   <div class="title">SKU 标签打印</div>
   <button id="printerPill" class="pill off" type="button"><span class="dot"></span><span id="printerPillText">连接打印机</span></button>
@@ -25,19 +26,26 @@
 <section id="view-scan" class="view active">
   <div class="cam-wrap" id="camWrap">
     <video id="video" playsinline muted autoplay></video>
-    <div class="cam-guide"><div class="cam-line"></div></div>
+    <div class="cam-guide" id="camGuide"><div class="cam-line"></div></div>
+    <div class="focus-ring hidden" id="focusRing"></div>
     <div class="cam-idle" id="camIdle">
       <button id="btnCam" class="btn big primary" type="button">📷 开始扫描</button>
       <div class="hint">对准商品条码，自动识别</div>
     </div>
     <button id="btnCamStop" class="cam-stop hidden" type="button">停止</button>
     <button id="btnTorch" class="cam-torch hidden" type="button">🔦</button>
+    <div class="cam-zoom hidden" id="camZoom">
+      <button type="button" data-z="1">1×</button><button type="button" data-z="2">2×</button><button type="button" data-z="3">3×</button>
+      <input id="zoomSlider" type="range" min="1" max="3" step="0.1" value="1" aria-label="变焦">
+    </div>
+    <div class="cam-tip hidden" id="camTip">小条码：手机离远一点，用 2× 放大；点画面可对焦</div>
   </div>
 
   <form id="manualForm" class="row manual" autocomplete="off">
-    <input id="manualInput" type="text" inputmode="numeric" enterkeyhint="search" placeholder="手动输入条码 / 扫码枪" aria-label="条码">
+    <input id="manualInput" type="text" inputmode="numeric" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="手动输入条码" aria-label="条码">
     <button class="btn" type="submit">查询</button>
   </form>
+  <div id="wedgeDebug" class="debug"><span class="dot"></span><span id="wedgeDebugText">扫码枪：直接扫，不用点输入框</span></div>
 
   <div id="resultCard" class="card result empty">
     <div class="result-empty">扫描或输入条码后，这里显示商品名称</div>
@@ -46,7 +54,7 @@
   <div class="print-row">
     <div class="stepper" aria-label="打印张数">
       <button type="button" id="copiesMinus">−</button>
-      <input id="copies" type="number" min="1" max="999" value="1" inputmode="numeric">
+      <input id="copies" type="text" value="1" readonly aria-label="张数">
       <button type="button" id="copiesPlus">＋</button>
     </div>
     <button id="btnPrint" class="btn big primary grow" type="button" disabled>🖨️ 打印</button>
@@ -115,6 +123,7 @@
       <label class="check"><input id="setRotate" type="checkbox"> 标签旋转 180°</label>
       <label class="check"><input id="setAutoPrint" type="checkbox"> 扫到就自动打印</label>
       <label class="check"><input id="setSound" type="checkbox"> 提示音</label>
+      <label>扫码枪结束等待 (ms，0=自动)<input id="setWedgeIdle" type="number" min="0" max="2000" step="10"></label>
       <details>
         <summary>蓝牙高级</summary>
         <label>每包字节<input id="setChunk" type="number" min="20" max="512"></label>
@@ -164,14 +173,15 @@
 
 <div id="toast" class="toast hidden"></div>
 
-<script src="vendor/JsBarcode.all.min.js"></script>
-<script src="vendor/zxing.min.js" defer></script>
-<script src="vendor/xlsx.full.min.js" defer></script>
-<script src="js/db.js"></script>
-<script src="js/importer.js"></script>
-<script src="js/label.js"></script>
-<script src="js/printer.js"></script>
-<script src="js/scanner.js"></script>
-<script src="js/app.js" defer></script>
+<script src="vendor/JsBarcode.all.min.js?v=1.1.0"></script>
+<script src="vendor/zxing.min.js?v=1.1.0" defer></script>
+<script src="vendor/xlsx.full.min.js?v=1.1.0" defer></script>
+<script src="js/db.js?v=1.1.0"></script>
+<script src="js/importer.js?v=1.1.0"></script>
+<script src="js/label.js?v=1.1.0"></script>
+<script src="js/printer.js?v=1.1.0"></script>
+<script src="js/scanner.js?v=1.1.0"></script>
+<script src="js/wedge.js?v=1.1.0"></script>
+<script src="js/app.js?v=1.1.0" defer></script>
 </body>
 </html>
